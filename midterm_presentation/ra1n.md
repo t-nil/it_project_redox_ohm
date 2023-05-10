@@ -28,8 +28,8 @@ E.g. `<stdio.h>, <stdlib.h>, <string.h>, <math.h>, <threads.h>`
 
 ---
 
-# TODO syscall example
-
+# TODO Syscall example
+TODO paths
 ```rust
 pub unsafe extern "C" fn fclose(stream: *mut FILE) -> c_int {
     let stream = &mut *stream;
@@ -60,9 +60,11 @@ pub unsafe extern "C" fn fclose(stream: *mut FILE) -> c_int {
 
 ---
 
-# TODO syscall example
-
-
+# TODO Syscall in Redox
+TODO paths
+```rust
+Sys::close()
+```
 
 ```rust
 /// Close a file
@@ -70,6 +72,30 @@ pub fn close(fd: usize) -> Result<usize> {
     unsafe { syscall1(SYS_CLOSE, fd) }
 }
 ```
+
+https://gitlab.redox-os.org/redox-os/syscall/-/blob/master/src/arch/x86_64.rs
+
+---
+
+# TODO Syscall in Linux
+
+```rust
+    fn close(fildes: c_int) -> c_int {
+        e(unsafe { syscall!(CLOSE, fildes) }) as c_int
+    }
+```
+
+```rust
+[…]
+pub const CLONE: usize = 56;
+pub const CLONE3: usize = 435;
+pub const CLOSE: usize = 3;
+pub const CLOSE_RANGE: usize = 436;
+pub const CONNECT: usize = 42;
+[…]
+```
+
+https://gitlab.redox-os.org/redox-os/syscall/-/blob/master/src/arch/x86_64.rs
 
 ---
 
