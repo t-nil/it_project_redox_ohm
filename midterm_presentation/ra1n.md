@@ -1,7 +1,19 @@
 ---
-layout: intro 
+layout: cover 
 ---
 
+# The `relibc` C Standard Library and it's role in the RedoxOS ecosystem
+
+---
+layout: default
+hideInToc: true
+---
+
+# Table of contents
+
+<Toc />
+
+---
 
 # C standard library (`libc`)
 
@@ -11,7 +23,24 @@ layout: intro
 - There is an ISO standard
 - There are multiple implementations (glibc, llvm-libc, musl, …)
 
-E.g. `<stdio.h>, <stdlib.h>, <string.h>, <math.h>, <threads.h>`
+E.g. `<stdio.h>, <stdlib.h>, <string.h>,…`
+
+<br>
+
+`…<math.h>, <threads.h> (since C11)`
+
+---
+
+## POSIX
+
+- Standard for Operating Systems
+- One part: Exposing a C API
+  - Therefor: Superset of ISO C
+  - often implemented inside `libc`
+
+E.g. `unistd.h, dirent.h, fcntl.h, pwd.h, …`[^201]
+
+[^301]: https://web.archive.org/web/20100724201155/http://www.space.unibe.ch/comp_doc/c_manual/C/FUNCTIONS/funcref.htm
 
 ---
 
@@ -20,17 +49,45 @@ E.g. `<stdio.h>, <stdlib.h>, <string.h>, <math.h>, <threads.h>`
 - Compatibility layer for C software (there are many)
 - Written in Rust => C bindings generated automatically w/ `cbindgen`
   - Rust gets you type+memory safety => **best of both worlds**
-- Maps operations to syscalls - difference between Redox and Linux
+- Maps operations to syscalls *- difference between Redox and Linux*
 
 ---
 
-# TODO Syscalls
+# Syscalls
+
+- "Kernel API"
+- kernel functions a program can call
+- run in priviledged mode
+- special call syntax
+  - that's why libc hides them away
+- *On x86 - and many other platforms - implemented as interrupts*
+
+---
+hideInToc: true
+---
+
+# Syscalls
+
+```mermaid
+graph LR
+subgraph User Space
+Program -- calls function in--> libc
+end
+libc -- sets up and invokes --> Syscall
+subgraph Kernel Space
+Syscall <-- executes code in --> Kernel
+end
+Syscall -- returns optional value to --> libc
+libc -- wraps retval to higher lvl API --> Program
+```
+
 
 ---
 
-# TODO Syscall example
-TODO paths
-```rust
+## Syscall example
+```rust{1|all|8}
+// relibc/src/header/stdio/mod.rs
+
 pub unsafe extern "C" fn fclose(stream: *mut FILE) -> c_int {
     let stream = &mut *stream;
     flockfile(stream);
@@ -52,40 +109,76 @@ pub unsafe extern "C" fn fclose(stream: *mut FILE) -> c_int {
 }
 ```
 
-```rust
-[...]
-    let close = Sys::close(*stream.file) < 0;
-[...]
-```
-
 ---
 
-# TODO Syscall in Redox
-TODO paths
-```rust
-Sys::close()
-```
+### Syscall in Redox
 
-```rust
-/// Close a file
-pub fn close(fd: usize) -> Result<usize> {
-    unsafe { syscall1(SYS_CLOSE, fd) }
-}
-```
+```rust{1|all|4}
+// src/platform/redox/mod.rs
 
-https://gitlab.redox-os.org/redox-os/syscall/-/blob/master/src/arch/x86_64.rs
+    fn close(fd: c_int) -> c_int {
+        e(syscall::close(fd as usize)) as c_int
+    }
+``` 
 
----
+```rust{1|all|5}
+// syscall/src/call.rs
 
-# TODO Syscall in Linux
-
-```rust
-    fn close(fildes: c_int) -> c_int {
-        e(unsafe { syscall!(CLOSE, fildes) }) as c_int
+    /// Close a file
+    pub fn close(fd: usize) -> Result<usize> {
+        unsafe { syscall1(SYS_CLOSE, fd) }
     }
 ```
 
-```rust
+```rust{1|all|7}
+// syscall/src/number.rs
+
+[…]
+    pub const SYS_RMDIR: usize =    SYS_CLASS_PATH | 84;
+    pub const SYS_UNLINK: usize =   SYS_CLASS_PATH | 10;
+
+    pub const SYS_CLOSE: usize =      SYS_CLASS_FILE | 6;
+    pub const SYS_DUP: usize =        SYS_CLASS_FILE | SYS_RET_FILE | 41;
+    pub const SYS_DUP2: usize =       SYS_CLASS_FILE | SYS_RET_FILE | 63;
+[…]
+```
+
+---
+hideInToc: true
+---
+
+### Syscall in Redox
+
+```rust{1|all}
+// kernel/src/syscall/fs.rs
+
+    pub fn close(fd: FileHandle) -> Result<usize> {
+        let file = {
+            let contexts = context::contexts();
+            let context_lock = contexts.current().ok_or(Error::new(ESRCH))?;
+            let context = context_lock.read();
+            context.remove_file(fd).ok_or(Error::new(EBADF))?
+        };
+
+        file.close()
+    }
+```
+
+---
+
+### Syscall in Linux
+
+```rust{1|all|4}
+// relibc/src/platform/linux/mod.rs
+
+fn close(fildes: c_int) -> c_int {
+    e(unsafe { syscall!(CLOSE, fildes) }) as c_int
+}
+```
+
+```rust{1|all|6}
+// syscall.rs/src/platform/linux-x86_64/nr.rs
+
 […]
 pub const CLONE: usize = 56;
 pub const CLONE3: usize = 435;
@@ -95,7 +188,38 @@ pub const CONNECT: usize = 42;
 […]
 ```
 
-https://gitlab.redox-os.org/redox-os/syscall/-/blob/master/src/arch/x86_64.rs
+---
+hideInToc: true
+---
+
+### Syscall in Linux
+
+```c{1|3-7|8|9-20|all}
+// linux/fs/open.c
+
+/*
+ * Careful here! We test whether the file pointer is NULL before
+ * releasing the fd. This ensures that one clone task can't release
+ * an fd while another clone is opening it.
+ */
+SYSCALL_DEFINE1(close, unsigned int, fd)
+{
+	int retval = close_fd(fd);
+
+	/* can't restart close syscall because file table entry was cleared */
+	if (unlikely(retval == -ERESTARTSYS ||
+		     retval == -ERESTARTNOINTR ||
+		     retval == -ERESTARTNOHAND ||
+		     retval == -ERESTART_RESTARTBLOCK))
+		retval = -EINTR;
+
+	return retval;
+}
+```
+
+<br>
+
+**BONUS:** https://gitlab.redox-os.org/redox-os/syscall/-/blob/master/src/arch/x86_64.rs
 
 ---
 
@@ -103,13 +227,20 @@ https://gitlab.redox-os.org/redox-os/syscall/-/blob/master/src/arch/x86_64.rs
 
 ---
 
-# TODO example for `cbindgen` generation
+## TODO example for `cbindgen` generation
 
 ---
 
 # TODO `relibc`: tests
 
----
+```javascript
+test('Expect math to work', () => {
+  expect(doSomeMath(1, 1)).toBe(2);
+});
+```
 
-# TODO cbindgen
+- why are tests important?
 
+--- 
+
+# Source list
