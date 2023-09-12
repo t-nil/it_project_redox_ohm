@@ -1,8 +1,10 @@
 ---
-layout: cover 
+layout: intro 
 ---
 
-# The `relibc` C Standard Library and it's role in the RedoxOS ecosystem
+# The `relibc` C Standard Library
+
+(and it's role in the RedoxOS ecosystem)
 
 ---
 layout: default
@@ -23,24 +25,42 @@ hideInToc: true
 - There is an ISO standard
 - There are multiple implementations (glibc, llvm-libc, musl, …)
 
+<br>
+
 E.g. `<stdio.h>, <stdlib.h>, <string.h>,…`
 
 <br>
 
 `…<math.h>, <threads.h> (since C11)`
 
+<style>
+p {
+    font-size: 24px;
+}
+</style>
+
 ---
 
-## POSIX
+# POSIX
 
 - Standard for Operating Systems
 - One part: Exposing a C API
   - Therefor: Superset of ISO C
   - often implemented inside `libc`
 
+<br>
+
 E.g. `unistd.h, dirent.h, fcntl.h, pwd.h, …`[^201]
 
-[^301]: https://web.archive.org/web/20100724201155/http://www.space.unibe.ch/comp_doc/c_manual/C/FUNCTIONS/funcref.htm
+<br>
+
+[^201]: https://web.archive.org/web/20100724201155/http://www.space.unibe.ch/comp_doc/c_manual/C/FUNCTIONS/funcref.htm
+
+<style>
+p {
+    font-size: 24px;
+}
+</style>
 
 ---
 
@@ -84,7 +104,7 @@ libc -- wraps retval to higher lvl API --> Program
 
 ---
 
-## Syscall example
+# Syscall example
 ```rust{1|all|8}
 // relibc/src/header/stdio/mod.rs
 
@@ -111,7 +131,7 @@ pub unsafe extern "C" fn fclose(stream: *mut FILE) -> c_int {
 
 ---
 
-### Syscall in Redox
+# Syscall in Redox
 
 ```rust{1|all|4}
 // src/platform/redox/mod.rs
@@ -147,7 +167,7 @@ pub unsafe extern "C" fn fclose(stream: *mut FILE) -> c_int {
 hideInToc: true
 ---
 
-### Syscall in Redox
+# Syscall in Redox
 
 ```rust{1|all}
 // kernel/src/syscall/fs.rs
@@ -166,7 +186,7 @@ hideInToc: true
 
 ---
 
-### Syscall in Linux
+# Syscall in Linux
 
 ```rust{1|all|4}
 // relibc/src/platform/linux/mod.rs
@@ -192,7 +212,7 @@ pub const CONNECT: usize = 42;
 hideInToc: true
 ---
 
-### Syscall in Linux
+# Syscall in Linux
 
 ```c{1|3-7|8|9-20|all}
 // linux/fs/open.c
@@ -223,15 +243,7 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 
 ---
 
-# TODO `cbindgen`
-
----
-
-## TODO example for `cbindgen` generation
-
----
-
-# TODO `relibc`: tests
+# `relibc`: tests
 
 ```javascript
 test('Expect math to work', () => {
@@ -239,8 +251,130 @@ test('Expect math to work', () => {
 });
 ```
 
+<v-clicks depth=2>
+
 - why are tests important?
+  - POSIX / ISO C standard dicate very specific behavior
+  - when your `libc` diverges, tons of programs start to misbehave
+  - (obv. don't trust the devs)
 
---- 
+</v-clicks>
 
-# Source list
+---
+hideInToc: true
+---
+
+# `relibc`: tests
+
+<br>
+
+<img
+  class="opacity-100"
+  src="images/man_system_1.png"
+/>
+---
+hideInToc: true
+---
+
+# `relibc`: tests
+
+<br>
+
+<img
+  class="opacity-100"
+  src="images/man_system_2.png"
+/>
+
+---
+hideInToc: true
+---
+
+# `relibc`: tests
+
+<br>
+
+<img
+  class="opacity-100"
+  src="images/man_system_3.png"
+/>
+
+---
+hideInToc: true
+---
+
+# `relibc`: tests
+
+<br>
+
+<img
+  class="opacity-100"
+  src="images/man_system_4.png"
+/>
+
+---
+hideInToc: true
+---
+
+# `relibc`: tests
+
+<br>
+
+<img
+  class="opacity-100"
+  src="images/man_system_5.png"
+/>
+
+<style>
+    img {
+        opacity: 1;
+    }
+</style>
+
+---
+
+<br>
+
+**...**
+
+<style>
+    div p {
+        font-size: 160px;
+    }
+</style>
+
+---
+hideInToc: true
+---
+
+# `relibc`: tests
+
+<br>
+
+<img
+  class="absolute opacity-100"
+  src="images/test_system.png"
+/>
+
+<style>
+    p img {
+    }
+</style>
+
+---
+
+# What would a better test collection for `system()` be?
+
+- Test shell detection on `command == NULL`
+- Test blocking `SIGCHLD` and ignoring `SIGINT` and `SIGQUIT`
+- Test start-with-hyphen bug
+- …
+- Test `system()` inhibiting `fork()` SIGCHLD?
+
+---
+
+# What are my long term goals?
+
+- Extending the test suite
+- Implement some kind of fuzzing
+- Port existing test suites
+- *MAYBE: Memory safety in classic non-checking c functions like gets, strcmp… via communication with the allocator*
